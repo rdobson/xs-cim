@@ -245,6 +245,7 @@ int xen_utils_cleanup_session(xen_utils_session *session); /* logout and free */
 int xen_utils_free_session(xen_utils_session *session); /* free, dont logout */
 int xen_utils_get_session(xen_utils_session **session, char *user, char *pw);
 int xen_utils_get_remote_session(xen_utils_session **session, char *xen_host_ip_addr, char *remote_login_user, char *remote_login_pw);
+int xen_utils_remote_session_logout(xen_utils_session *session, char *session_id);
 
 int xen_utils_get_time(void);
 

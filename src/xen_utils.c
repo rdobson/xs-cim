@@ -903,6 +903,43 @@ call_func(const void *data, size_t len, void *user_handle,
 }
 
 /*
+ * Logout a specified session id, using an existing session.
+ * This is required for loging out a session created on a slave
+ * against the pool master.
+ * 
+ * Returns 1 on success, 0 on failure.
+ */
+int xen_utils_remote_session_logout(
+    xen_utils_session *session,
+    char *session_id)
+{
+
+    _SBLIM_TRACE(_SBLIM_TRACE_LEVEL_INFO, ("Enter: xen_utils_remote_session_logout"));
+
+    xen_session *s = NULL;
+    s = calloc(1, sizeof(xen_session));
+    if (s == NULL) {
+        _SBLIM_TRACE(_SBLIM_TRACE_LEVEL_ERROR, ("No memory for Xen Daemon session object"));
+        return 0;
+    }
+
+    /* Setup session to use provided handle with swapped session_id */
+    s->call_func = session->xen->call_func;
+    s->handle = session->xen->handle;
+    s->session_id = session_id;
+#if XENAPI_VERSION > 400
+    s->api_version = xen_api_version_1_3; 
+#endif    
+    s->ok = true;
+    /* xen_session_logout frees the session object */
+    xen_session_logout(s);
+
+    _SBLIM_TRACE(_SBLIM_TRACE_LEVEL_INFO, ("Exit: xen_utils_remote_session_logout"));
+
+    return 1;
+}
+
+/*
  * Create a xen session with a remote host, using the xapi TCP port
  *
  * Returns 1 on success, 0 on failure.
@@ -985,10 +1022,19 @@ int xen_utils_get_session(
                 /* We could return the error as is and expect the caller to route to the master,
                    however, the WinRM client cannot handle HTTP redirects. Lets do it ourselves */
                 char *master = strdup(s->xen->error_description[1]);
+                char *slave_session_id = strdup(s->xen->session_id);
                 xen_utils_cleanup_session(s);
                 /* get a new session with the right master */
                 if(!xen_utils_get_remote_session(&s, master, user, pw))
                     goto Error;
+
+                /* Now that we have a new session with the pool master, 
+                 * we must free the slave session against the master. 
+                 * This is to work around the logout call to slave not 
+                 * working.
+                 */
+                _SBLIM_TRACE(_SBLIM_TRACE_LEVEL_INFO, ("Remote logout: %s", slave_session_id));
+                xen_utils_remote_session_logout(s, slave_session_id);
             }
             else
                goto Error;
